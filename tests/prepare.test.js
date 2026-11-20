@@ -38,6 +38,15 @@ describe("prepare and joins",()=>{
     expect(out.prepareReport.warnings.length).toBeGreaterThan(0);
   });
 
+  it("does not match missing keys to each other",()=>{
+    const a=ingestRows([["id","x"],["A",1],["",2]]);
+    const b=ingestRows([["id","z"],["A",10],["",20]]);
+    const out=joinDatasets(a,b,{keys:["id"],how:"left"});
+    expect(out.rows[1].z).toBe(null);
+    expect(out.prepareReport.missingKeyRows.left).toBe(1);
+    expect(out.prepareReport.missingKeyRows.right).toBe(1);
+  });
+
   it("blocks duplicate-key many-to-many joins",()=>{
     const dup=ingestRows([
       ["ticker","date","x"],
