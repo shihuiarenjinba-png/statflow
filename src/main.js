@@ -4,6 +4,8 @@ import { ingestFile } from "./core/ingest.js";
 import { validateDataset } from "./core/validation.js";
 import { numericColumns, categoricalColumns } from "./core/canonical.js";
 import { addLogTransform, suggestLogTransforms } from "./core/transform.js";
+import { detectCommonKeys, joinMany } from "./prepare/join.js";
+import { PREPARE_TEMPLATES, templateDefaults } from "./prepare/templates.js";
 import { GOALS } from "./analysis/recommender.js";
 import { CUSTOM_METHODS } from "./analysis/catalog.js";
 import { runAnalysis, explain } from "./analysis/engine.js";
@@ -11,6 +13,8 @@ import { canonicalCsv, downloadText } from "./exporter.js";
 
 const app=document.querySelector("#app");
 let dataset=null, validation=null, lastRun=null, currentFile=null;
+let auxDatasets=[], prepareReports=[];
+let prepareTemplate="standard";
 let mode="auto", transposed=false, uiError="";
 
 function esc(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");}
@@ -48,6 +52,8 @@ async function loadCurrentFile(){
     dataset=await ingestFile(currentFile,undefined,{transpose:transposed});
     validation=validateDataset(dataset);
     lastRun=null;
+    auxDatasets=[];
+    prepareReports=[];
   }catch(err){
     dataset=null;validation=null;lastRun=null;
     uiError=err?.message||"データの読み込みに失敗しました。";
@@ -60,9 +66,12 @@ function render(){
   const cats=dataset?categoricalColumns(dataset):[];
   const quality=validation?.quality;
   const logSuggestions=dataset?suggestLogTransforms(dataset):[];
+  const commonKeys=dataset&&auxDatasets.length?detectCommonKeys([dataset,...auxDatasets]):[];
+  const prepareDefaults=templateDefaults(prepareTemplate);
+  const marketSafe=Boolean(prepareDefaults.join?.marketSafe);
   app.innerHTML=`
     <header>
-      <div><span class="eyebrow">AUTOMATED STATISTICS</span><h1>StatFlow</h1><p>Clean → Validate → Transform → Analyze → Explain → Export</p></div>
+      <div><span class="eyebrow">RULE-BASED STATISTICS</span><h1>StatFlow</h1><p>Upload → Normalize → Validate → Prepare → Transform → Analyze → Explain → Export</p></div>
       <div class="mode-switch">${[["auto","Auto"],["custom","Custom"]].map(([m,l])=>`<button data-mode="${m}" class="${mode===m?"active":""}">${l}</button>`).join("")}</div>
     </header>
     <main>
@@ -70,12 +79,13 @@ function render(){
         <div class="step done"><span>01</span><div><b>Upload</b><small>${dataset?esc(dataset.source.fileName):"CSV / Excel"}</small></div></div>
         <div class="step ${dataset?"done":""}"><span>02</span><div><b>Normalize</b><small>Canonical Dataset</small></div></div>
         <div class="step ${validation?"done":""}"><span>03</span><div><b>Validate</b><small>Quality gate</small></div></div>
-        <div class="step ${dataset?"done":""}"><span>04</span><div><b>Transform</b><small>Explicit only</small></div></div>
-        <div class="step ${lastRun?"done":""}"><span>05</span><div><b>Analyze</b><small>Auto / Custom</small></div></div>
-        <div class="step ${lastRun?"done":""}"><span>06</span><div><b>Export</b><small>CSV / JSON</small></div></div>
+        <div class="step ${dataset?"done":""}"><span>04</span><div><b>Prepare</b><small>Template / Join</small></div></div>
+        <div class="step ${dataset?"done":""}"><span>05</span><div><b>Transform</b><small>Explicit only</small></div></div>
+        <div class="step ${lastRun?"done":""}"><span>06</span><div><b>Analyze</b><small>Fixed rules / Custom</small></div></div>
+        <div class="step ${lastRun?"done":""}"><span>07</span><div><b>Export</b><small>CSV / JSON</small></div></div>
       </aside>
       <section class="workspace">
-        <div class="card upload-card"><div><h2>データを読み込む</h2><p>CSV / XLSX / XLSをブラウゞ内で処理します。</p></div><div class="upload-actions">${dataset?`<button id="transpose" class="secondary">${transposed?"転置を戻す":"行列を転置"}</button>`:""}<label class="upload-button">ファイルを選択<input id="file" type="file" accept=".csv,.xlsx,.xls,.txt"></label></div></div>
+        <div class="card upload-card"><div><h2>データを読み込む</h2><p>CSV / XLSX / XLSをブラウザ内で処理します。サーバーAIは使用しません。</p></div><div class="upload-actions">${dataset?`<button id="transpose" class="secondary">${transposed?"転置を戻す":"行列を転置"}</button>`:""}<label class="upload-button">ファイルを選択<input id="file" type="file" accept=".csv,.xlsx,.xls,.txt"></label></div></div>
         ${uiError?`<div class="inline-error"><b>処理を完了できませんでした</b><span>${esc(uiError)}</span></div>`:""}
         ${dataset?`
           <div class="grid">
@@ -83,6 +93,24 @@ function render(){
             <div class="card quality-card ${qualityClass(quality.gate)}"><div class="quality-head"><div><span class="eyebrow">DATA QUALITY</span><h3>${esc(quality.label)}</h3></div><div class="quality-score"><strong>${quality.score}</strong><span>/100</span></div></div><p>${esc(quality.message)}</p><div class="quality-meta"><span>欠損 ${(quality.metrics.missingRate*100).toFixed(1)}%</span><span>重複 ${(quality.metrics.duplicateRate*100).toFixed(1)}%</span><span>警告 ${quality.counts.warnings}</span><span>エラー ${quality.counts.errors}</span></div></div>
           </div>
           <div class="card"><span class="eyebrow">QUALITY DETAILS</span><h3>修正と警告</h3><div class="issues">${validation.issues.length?validation.issues.slice(0,12).map(i=>`<div class="issue ${i.level}"><b>${esc(i.column||i.code)}</b><span>${esc(i.message)}</span></div>`).join(""):'<p class="ok">大きな品質警告はありません。</p>'}</div><p class="guard">欠損補完・外れ値削除・重複削除など、結果を変える修正は自動実行しません。</p></div>
+
+          <div class="card"><span class="eyebrow">PREPARE</span><h3>テンプレートと複数ファイル結合</h3>
+            <p>整形後の分析構造を明示的に作ります。結合は固定ルールで実行し、行の脱落を監査します。</p>
+            <div class="controls prepare-controls">
+              <label>テンプレート<select id="prepareTemplate">\${PREPARE_TEMPLATES.map(t=>\`<option value="\${t.id}" \${t.id===prepareTemplate?"selected":""}>\${esc(t.label)}</option>\`).join("")}</select></label>
+              <label>追加ファイル<input id="prepareFiles" type="file" accept=".csv,.xlsx,.xls,.txt" multiple></label>
+              <label class="wide-control">共通キー<select id="prepareKeys" multiple>\${commonKeys.map(k=>\`<option value="\${esc(k)}" selected>\${esc(k)}</option>\`).join("")}</select></label>
+              <label>Join<select id="joinHow"><option value="left" \${prepareDefaults.join?.how==="left"?"selected":""}>left（基準を保持）</option><option value="outer">outer（両方保持）</option><option value="inner">inner（共通のみ）</option></select></label>
+              \${marketSafe?'<label class="risk-control"><input id="allowRiskyInner" type="checkbox">市場データで危険なinner joinを明示許可</label>':""}
+              <button id="applyTemplate" class="secondary">テンプレート適用</button>
+              <button id="runPrepare" class="primary" \${auxDatasets.length?"":"disabled"}>結合を実行</button>
+            </div>
+            <div class="prepare-status">
+              <span>追加ファイル \${auxDatasets.length}件</span>
+              \${prepareTemplate==="market_panel"?'<span class="market-guard">市場安全モード：inner joinは既定禁止</span>':""}
+            </div>
+            \${prepareReports.length?\`<div class="join-reports">\${prepareReports.map((r,i)=>\`<div><b>Join \${i+1}</b><span>\${esc(r.how)} / matched \${r.matched} / base-only \${r.leftOnly} / right-only \${r.rightOnly} / result \${r.resultRows}</span>\${r.warnings?.map(w=>\`<small>\${esc(w)}</small>\`).join("")||""}</div>\`).join("")}</div>\`:""}
+          </div>
 
           <div class="card"><span class="eyebrow">OPTIONAL TRANSFORM</span><h3>対数変換</h3><p>元列を残したまま派生列を追加します。Autoでも自動適用しません。</p>
             ${logSuggestions.length?`<div class="transform-suggestions">${logSuggestions.slice(0,4).map(s=>`<div><b>${esc(s.column)}</b><span>${esc(s.reason)}</span></div>`).join("")}</div>`:'<p class="heuristic-note">現在、強い右歪みによる対数変換候補は検出されていません。</p>'}
@@ -100,7 +128,7 @@ function render(){
               ${mode==="custom"?`<label class="wide-control">説明変数（複数選択）<select id="predictors" multiple>${nums.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("")}</select></label><label>λ<input id="lambda" type="number" min="0" step="0.05" value="0.1"></label><label>α<input id="alpha" type="number" min="0" max="1" step="0.1" value="0.5"></label>`:""}
               <button id="run" class="primary">分析を実行</button>
             </div>
-            <p class="boundary">${mode==="auto"?"Autoはデータ型と目的から保守的な手法を選びます。対数化・削除・補完は勝手に行いません。":"CustomはBasic / Intermediate / Advancedの手法を直接選択できます。"}</p>
+            <p class="boundary">${mode==="auto"?"AutoはAIではなく固定ルールです。データ型と目的から保守的な手法を選び、対数化・削除・補完・標本変更は勝手に行いません。":"CustomはBasic / Intermediate / Advancedの手法を直接選択できます。"}</p>
           </div>
 
           ${lastRun?`<div class="card result-card"><span class="eyebrow">RESULT</span><h2>${esc(lastRun.result.method||"Descriptive statistics")}</h2>${lastRun.quality?.gate==="warn"?'<div class="result-caution">品質警告があるデータから計算されています。</div>':""}<div class="explanation">${esc(explain(lastRun.result))}</div>${resultHtml(lastRun)}</div>`:""}
@@ -113,6 +141,40 @@ function render(){
   document.querySelector("#file").onchange=async e=>{currentFile=e.target.files?.[0]||null;transposed=false;await loadCurrentFile();};
   document.querySelector("#transpose")?.addEventListener("click",async()=>{transposed=!transposed;await loadCurrentFile();});
   if(dataset){
+    document.querySelector("#prepareTemplate")?.addEventListener("change",e=>{prepareTemplate=e.target.value;prepareReports=[];uiError="";render();});
+    document.querySelector("#prepareFiles")?.addEventListener("change",async e=>{
+      try{
+        auxDatasets=[];
+        for(const file of [...(e.target.files||[])]) auxDatasets.push(await ingestFile(file));
+        prepareReports=[];uiError="";
+      }catch(err){auxDatasets=[];uiError=err?.message||"追加ファイルを読み込めませんでした。";}
+      render();
+    });
+    document.querySelector("#applyTemplate")?.addEventListener("click",async()=>{
+      try{
+        if(prepareTemplate==="transposed"&&!transposed){transposed=true;await loadCurrentFile();return;}
+        uiError="";
+      }catch(err){uiError=err?.message||"テンプレートを適用できませんでした。";}
+      render();
+    });
+    document.querySelector("#runPrepare")?.addEventListener("click",()=>{
+      try{
+        const keys=[...document.querySelector("#prepareKeys").selectedOptions].map(o=>o.value);
+        const defaults=templateDefaults(prepareTemplate);
+        if(defaults.join?.requireCompositeKey&&keys.length<2) throw new Error("このテンプレートでは2列以上の複合キーを選択してください。");
+        const how=document.querySelector("#joinHow").value;
+        dataset=joinMany([dataset,...auxDatasets],{
+          keys,how,
+          marketSafe:Boolean(defaults.join?.marketSafe),
+          allowSurvivorshipRisk:Boolean(document.querySelector("#allowRiskyInner")?.checked)
+        });
+        prepareReports=dataset.prepareReports||[];
+        auxDatasets=[];
+        validation=validateDataset(dataset);
+        lastRun=null;uiError="";
+      }catch(err){uiError=err?.message||"データ結合を完了できませんでした。";}
+      render();
+    });
     document.querySelector("#applyTransform")?.addEventListener("click",()=>{
       try{
         dataset=addLogTransform(dataset,document.querySelector("#transformColumn").value,document.querySelector("#transformType").value);
