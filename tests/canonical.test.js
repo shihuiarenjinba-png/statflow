@@ -27,6 +27,16 @@ describe("canonical dataset",()=>{
     expect(v.issues.some(x=>x.code==="duplicate_rows")).toBe(true);
     expect(ds.rows).toHaveLength(3);
   });
+  it("can skip leading metadata rows with an explicit header row",()=>{
+    const ds=ingestRows([["Report title"],["name","value"],["A",1],["B",2]],"report.csv",{headerRow:2});
+    expect(ds.columns.map(c=>c.name)).toEqual(["name","value"]);
+    expect(ds.rows).toHaveLength(2);
+  });
+  it("can combine a two-row header explicitly",()=>{
+    const ds=ingestRows([["Sales","Sales"],["JP","US"],[10,20],[30,40]],"two-row.csv",{combineHeaderRows:2});
+    expect(ds.columns.map(c=>c.name)).toEqual(["Sales / JP","Sales / US"]);
+    expect(ds.rows[0]["Sales / JP"]).toBe(10);
+  });
   it("transposes rectangular CSV-like rows",()=>{
     expect(transposeRows([["id","A","B"],["x",1,2],["y",3,4]])).toEqual([
       ["id","x","y"],["A",1,3],["B",2,4]
