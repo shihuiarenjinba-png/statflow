@@ -8,7 +8,9 @@ import { recommend } from "./recommender.js";
 import { validateDataset } from "../core/validation.js";
 
 const autoMode=m=>m==="auto"||m==="basic"||!m;
-const predictorsFor=(ds,target,max=20)=>ds.columns.filter(c=>c.kind==="numeric"&&c.name!==target).map(c=>c.name).slice(0,max);\nconst finiteParam=(value,fallback)=>{const n=Number(value);return Number.isFinite(n)?n:fallback;};\nconst cleanPredictors=(items,target)=>items.filter((v,i,a)=>v!==target&&a.indexOf(v)===i);
+const predictorsFor=(ds,target,max=20)=>ds.columns.filter(c=>c.kind==="numeric"&&c.name!==target).map(c=>c.name).slice(0,max);
+const finiteParam=(value,fallback)=>{const n=Number(value);return Number.isFinite(n)?n:fallback;};
+const cleanPredictors=(items,target)=>items.filter((v,i,a)=>v!==target&&a.indexOf(v)===i);
 
 export function runAnalysis(ds,request){
   const mode=request.mode||"auto";let spec={...request};
