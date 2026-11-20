@@ -8,5 +8,5 @@ describe("auto/custom",()=>{
   it("two groups -> Welch",()=>expect(recommend(ds,"compare","y","group").method).toBe("welch"));
   it("drivers -> OLS",()=>expect(recommend(ds,"drivers","y").method).toBe("ols"));
   it("categorical -> chi-square",()=>expect(recommend(ds,"categorical",undefined,"group","segment").method).toBe("chisquare"));
-  it("custom Lasso",()=>expect(runAnalysis(ds,{mode:"custom",method:"lasso",target:"y",predictors:["x"],lambda:.1}).result.method).toBe("Lasso regression"));
+  it("custom Lasso",()=>expect(runAnalysis(ds,{mode:"custom",method:"lasso",target:"y",predictors:["x"],lambda:.1}).result.method).toBe("Lasso regression"));\n  it("preserves explicit zero lambda",()=>expect(runAnalysis(ds,{mode:"custom",method:"lasso",target:"y",predictors:["x"],lambda:0}).result.lambda).toBe(0));\n  it("removes target from selected predictors",()=>expect(runAnalysis(ds,{mode:"custom",method:"ridge",target:"y",predictors:["x","y"],lambda:1}).result.predictors).toEqual(["x"]));
 });
