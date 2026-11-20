@@ -11,6 +11,8 @@ There is no server-side AI dependency. Auto mode is a fixed rule engine.
 Normalize repairs safe structural issues. Prepare changes analytical structure and therefore must be explicit and auditable.
 
 Prepare currently covers:
+- explicit header-row selection for files with title/metadata rows
+- deterministic 2-row / 3-row header concatenation
 - explicit transpose template
 - panel-data template
 - multi-file lookup joins
@@ -39,7 +41,7 @@ Recommended keys:
 
 The base dataset should represent the intended universe at each point in time. Missing fundamentals, classifications, or auxiliary data should normally stay missing rather than cause automatic row deletion.
 
-A safe join alone does not fully solve survivorship bias. Historical universe membership, delistings, ticker/security-ID changes, IPO dates, and data-source coverage still matter. StatFlow therefore treats market-safe joining as a guardrail, not proof of unbiased research.
+A safe join alone does not fully solve survivorship bias. Historical universe membership, delistings, ticker/security-ID changes, IPO dates, and data-source coverage still matter. StatFlow therefore treats market-safe joining as a guardrail, not proof of unbiased research.\n\nMarket mode records whether the user has explicitly confirmed that the base file represents the point-in-time universe. If that is not confirmed, the join report keeps an unresolved survivorship-bias warning. It also reports securities that begin after the global start or end before the global end as entry/exit candidates; these may be IPOs, delistings, index changes, or data gaps and are not automatically removed.
 
 ## Join audit report
 
