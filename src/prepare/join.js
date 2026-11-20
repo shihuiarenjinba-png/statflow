@@ -1,5 +1,9 @@
+function hasCompleteKey(row, keys) {
+  return keys.every(k => row[k] !== null && row[k] !== undefined && String(row[k]).trim() !== "");
+}
+
 function keyOf(row, keys) {
-  return keys.map(k => row[k] === null || row[k] === undefined ? "" : String(row[k])).join("\u241F");
+  return keys.map(k => String(row[k])).join("\u241F");
 }
 
 function assertKeys(ds, keys, label) {
@@ -11,12 +15,14 @@ function assertKeys(ds, keys, label) {
 
 function duplicateKeyReport(ds, keys) {
   const seen=new Map();
+  let missingKeyRows=0;
   for(const row of ds.rows) {
+    if(!hasCompleteKey(row,keys)) { missingKeyRows++; continue; }
     const k=keyOf(row,keys);
     seen.set(k,(seen.get(k)||0)+1);
   }
   const duplicateKeys=[...seen.entries()].filter(([,n])=>n>1);
-  return {duplicateKeyCount:duplicateKeys.length,duplicateRows:duplicateKeys.reduce((s,[,n])=>s+n-1,0)};
+  return {duplicateKeyCount:duplicateKeys.length,duplicateRows:duplicateKeys.reduce((s,[,n])=>s+n-1,0),missingKeyRows};
 }
 
 function renamedColumns(left,right,keys,suffix) {
@@ -60,14 +66,15 @@ export function joinDatasets(left,right,options={}) {
     throw new Error("結合キーが一意ではありません。many-to-many結合による行数爆発を防ぐため停止しました。集約またはキー追加が必要です。");
   }
 
-  const rightMap=new Map(right.rows.map(r=>[keyOf(r,keys),r]));
-  const leftMap=new Map(left.rows.map(r=>[keyOf(r,keys),r]));
+  const rightMap=new Map(right.rows.filter(r=>hasCompleteKey(r,keys)).map(r=>[keyOf(r,keys),r]));
+  const leftMap=new Map(left.rows.filter(r=>hasCompleteKey(r,keys)).map(r=>[keyOf(r,keys),r]));
   const mapping=renamedColumns(left,right,keys,suffix);
   const rows=[];
   let matched=0,leftOnly=0,rightOnly=0;
 
   for(const l of left.rows) {
-    const k=keyOf(l,keys), r=rightMap.get(k);
+    const complete=hasCompleteKey(l,keys);
+    const k=complete?keyOf(l,keys):null, r=complete?rightMap.get(k):undefined;
     const out={...l};
     for(const [source,target] of Object.entries(mapping)) out[target]=r ? r[source] : null;
     if(r) matched++; else leftOnly++;
@@ -76,6 +83,7 @@ export function joinDatasets(left,right,options={}) {
 
   if(how==="outer") {
     for(const r of right.rows) {
+      if(!hasCompleteKey(r,keys)) { rightOnly++; continue; }
       const k=keyOf(r,keys);
       if(leftMap.has(k)) continue;
       rightOnly++;
@@ -85,7 +93,7 @@ export function joinDatasets(left,right,options={}) {
       rows.push(out);
     }
   } else {
-    for(const r of right.rows) if(!leftMap.has(keyOf(r,keys))) rightOnly++;
+    for(const r of right.rows) if(!hasCompleteKey(r,keys) || !leftMap.has(keyOf(r,keys))) rightOnly++;
   }
 
   const rightColumnByName=Object.fromEntries(right.columns.map(c=>[c.name,c]));
@@ -97,9 +105,11 @@ export function joinDatasets(left,right,options={}) {
     how,keys,marketSafe,
     leftRows:left.rows.length,rightRows:right.rows.length,resultRows:rows.length,
     matched,leftOnly,rightOnly,
+    missingKeyRows:{left:leftDup.missingKeyRows,right:rightDup.missingKeyRows},
     rowRetention:left.rows.length ? rows.length/left.rows.length : 0,
     warnings:[]
   };
+  if(leftDup.missingKeyRows || rightDup.missingKeyRows) report.warnings.push("結合キー欠損行は一致扱いにせず、未一致として処理しました。");
   if(how==="inner" && leftOnly>0) report.warnings.push("inner join により基準データの行が脱落しました。");
   if(marketSafe && leftOnly>0) report.warnings.push("追加データに存在しない銘柄/時点があります。欠損として保持し、標本から自動除外しないでください。");
   if(marketSafe && keys.length<2) report.warnings.push("市場パネルでは通常、銘柄IDと時点の複合キーが必要です。単一キー結合は要確認です。");
