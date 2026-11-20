@@ -97,19 +97,19 @@ function render(){
           <div class="card"><span class="eyebrow">PREPARE</span><h3>テンプレートと複数ファイル結合</h3>
             <p>整形後の分析構造を明示的に作ります。結合は固定ルールで実行し、行の脱落を監査します。</p>
             <div class="controls prepare-controls">
-              <label>テンプレート<select id="prepareTemplate">\${PREPARE_TEMPLATES.map(t=>\`<option value="\${t.id}" \${t.id===prepareTemplate?"selected":""}>\${esc(t.label)}</option>\`).join("")}</select></label>
+              <label>テンプレート<select id="prepareTemplate">${PREPARE_TEMPLATES.map(t=>`<option value="${t.id}" ${t.id===prepareTemplate?"selected":""}>${esc(t.label)}</option>`).join("")}</select></label>
               <label>追加ファイル<input id="prepareFiles" type="file" accept=".csv,.xlsx,.xls,.txt" multiple></label>
-              <label class="wide-control">共通キー<select id="prepareKeys" multiple>\${commonKeys.map(k=>\`<option value="\${esc(k)}" selected>\${esc(k)}</option>\`).join("")}</select></label>
-              <label>Join<select id="joinHow"><option value="left" \${prepareDefaults.join?.how==="left"?"selected":""}>left（基準を保持）</option><option value="outer">outer（両方保持）</option><option value="inner">inner（共通のみ）</option></select></label>
-              \${marketSafe?'<label class="risk-control"><input id="allowRiskyInner" type="checkbox">市場データで危険なinner joinを明示許可</label>':""}
+              <label class="wide-control">共通キー<select id="prepareKeys" multiple>${commonKeys.map(k=>`<option value="${esc(k)}" selected>${esc(k)}</option>`).join("")}</select></label>
+              <label>Join<select id="joinHow"><option value="left" ${prepareDefaults.join?.how==="left"?"selected":""}>left（基準を保持）</option><option value="outer">outer（両方保持）</option><option value="inner">inner（共通のみ）</option></select></label>
+              ${marketSafe?'<label class="risk-control"><input id="allowRiskyInner" type="checkbox">市場データで危険なinner joinを明示許可</label>':""}
               <button id="applyTemplate" class="secondary">テンプレート適用</button>
-              <button id="runPrepare" class="primary" \${auxDatasets.length?"":"disabled"}>結合を実行</button>
+              <button id="runPrepare" class="primary" ${auxDatasets.length?"":"disabled"}>結合を実行</button>
             </div>
             <div class="prepare-status">
-              <span>追加ファイル \${auxDatasets.length}件</span>
-              \${prepareTemplate==="market_panel"?'<span class="market-guard">市場安全モード：inner joinは既定禁止</span>':""}
+              <span>追加ファイル ${auxDatasets.length}件</span>
+              ${prepareTemplate==="market_panel"?'<span class="market-guard">市場安全モード：inner joinは既定禁止</span>':""}
             </div>
-            \${prepareReports.length?\`<div class="join-reports">\${prepareReports.map((r,i)=>\`<div><b>Join \${i+1}</b><span>\${esc(r.how)} / matched \${r.matched} / base-only \${r.leftOnly} / right-only \${r.rightOnly} / result \${r.resultRows}</span>\${r.warnings?.map(w=>\`<small>\${esc(w)}</small>\`).join("")||""}</div>\`).join("")}</div>\`:""}
+            ${prepareReports.length?`<div class="join-reports">${prepareReports.map((r,i)=>`<div><b>Join ${i+1}</b><span>${esc(r.how)} / matched ${r.matched} / base-only ${r.leftOnly} / right-only ${r.rightOnly} / result ${r.resultRows}</span>${r.warnings?.map(w=>`<small>${esc(w)}</small>`).join("")||""}</div>`).join("")}</div>`:""}
           </div>
 
           <div class="card"><span class="eyebrow">OPTIONAL TRANSFORM</span><h3>対数変換</h3><p>元列を残したまま派生列を追加します。Autoでも自動適用しません。</p>
