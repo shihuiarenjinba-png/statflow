@@ -1,3 +1,5 @@
+import { auditMarketUniverse } from "./market.js";
+
 function hasCompleteKey(row, keys) {
   return keys.every(k => row[k] !== null && row[k] !== undefined && String(row[k]).trim() !== "");
 }
@@ -51,6 +53,7 @@ export function joinDatasets(left,right,options={}) {
   const suffix=options.suffix||"_right";
   const marketSafe=Boolean(options.marketSafe);
   const allowSurvivorshipRisk=Boolean(options.allowSurvivorshipRisk);
+  const pointInTimeUniverseVerified=Boolean(options.pointInTimeUniverseVerified);
 
   if(!keys.length) throw new Error("結合キーを1つ以上指定してください。");
   assertKeys(left,keys,"基準データ");
@@ -101,14 +104,16 @@ export function joinDatasets(left,right,options={}) {
     ...left.columns,
     ...Object.entries(mapping).map(([source,target])=>({...rightColumnByName[source],name:target,joinedFrom:source}))
   ];
+  const marketAudit=marketSafe?auditMarketUniverse(left,keys,{pointInTimeUniverseVerified}):null;
   const report={
-    how,keys,marketSafe,
+    how,keys,marketSafe,marketAudit,
     leftRows:left.rows.length,rightRows:right.rows.length,resultRows:rows.length,
     matched,leftOnly,rightOnly,
     missingKeyRows:{left:leftDup.missingKeyRows,right:rightDup.missingKeyRows},
     rowRetention:left.rows.length ? rows.length/left.rows.length : 0,
     warnings:[]
   };
+  if(marketAudit?.warnings?.length) report.warnings.push(...marketAudit.warnings);
   if(leftDup.missingKeyRows || rightDup.missingKeyRows) report.warnings.push("結合キー欠損行は一致扱いにせず、未一致として処理しました。");
   if(how==="inner" && leftOnly>0) report.warnings.push("inner join により基準データの行が脱落しました。");
   if(marketSafe && leftOnly>0) report.warnings.push("追加データに存在しない銘柄/時点があります。欠損として保持し、標本から自動除外しないでください。");
