@@ -14,7 +14,7 @@ import { canonicalCsv, downloadText } from "./exporter.js";
 const app=document.querySelector("#app");
 let dataset=null, validation=null, lastRun=null, currentFile=null;
 let auxDatasets=[], prepareReports=[];
-let prepareTemplate="standard";
+let prepareTemplate="standard", rawHeaderRow=1, rawHeaderDepth=1;
 let mode="auto", transposed=false, uiError="";
 
 function esc(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");}
@@ -49,7 +49,7 @@ async function loadCurrentFile(){
   if(!currentFile)return;
   uiError="";
   try{
-    dataset=await ingestFile(currentFile,undefined,{transpose:transposed});
+    dataset=await ingestFile(currentFile,undefined,{transpose:transposed,headerRow:rawHeaderRow,combineHeaderRows:rawHeaderDepth});
     validation=validateDataset(dataset);
     lastRun=null;
     auxDatasets=[];
@@ -98,6 +98,8 @@ function render(){
             <p>整形後の分析構造を明示的に作ります。結合は固定ルールで実行し、行の脱落を監査します。</p>
             <div class="controls prepare-controls">
               <label>テンプレート<select id="prepareTemplate">${PREPARE_TEMPLATES.map(t=>`<option value="${t.id}" ${t.id===prepareTemplate?"selected":""}>${esc(t.label)}</option>`).join("")}</select></label>
+              <label>見出し行<input id="headerRow" type="number" min="1" step="1" value="${rawHeaderRow}"></label>
+              <label>見出し段数<select id="headerDepth"><option value="1" ${rawHeaderDepth===1?"selected":""}>1段</option><option value="2" ${rawHeaderDepth===2?"selected":""}>2段を連結</option><option value="3" ${rawHeaderDepth===3?"selected":""}>3段を連結</option></select></label>
               <label>追加ファイル<input id="prepareFiles" type="file" accept=".csv,.xlsx,.xls,.txt" multiple></label>
               <label class="wide-control">共通キー<select id="prepareKeys" multiple>${commonKeys.map(k=>`<option value="${esc(k)}" selected>${esc(k)}</option>`).join("")}</select></label>
               <label>Join<select id="joinHow"><option value="left" ${prepareDefaults.join?.how==="left"?"selected":""}>left（基準を保持）</option><option value="outer">outer（両方保持）</option><option value="inner">inner（共通のみ）</option></select></label>
@@ -141,19 +143,22 @@ function render(){
   document.querySelector("#file").onchange=async e=>{currentFile=e.target.files?.[0]||null;transposed=false;await loadCurrentFile();};
   document.querySelector("#transpose")?.addEventListener("click",async()=>{transposed=!transposed;await loadCurrentFile();});
   if(dataset){
-    document.querySelector("#prepareTemplate")?.addEventListener("change",e=>{prepareTemplate=e.target.value;prepareReports=[];uiError="";render();});
+    document.querySelector("#prepareTemplate")?.addEventListener("change",e=>{prepareTemplate=e.target.value;const d=templateDefaults(prepareTemplate);rawHeaderRow=d.headerRow||1;rawHeaderDepth=d.combineHeaderRows||1;prepareReports=[];uiError="";render();});
     document.querySelector("#prepareFiles")?.addEventListener("change",async e=>{
       try{
         auxDatasets=[];
-        for(const file of [...(e.target.files||[])]) auxDatasets.push(await ingestFile(file));
+        for(const file of [...(e.target.files||[])]) auxDatasets.push(await ingestFile(file,undefined,{headerRow:rawHeaderRow,combineHeaderRows:rawHeaderDepth}));
         prepareReports=[];uiError="";
       }catch(err){auxDatasets=[];uiError=err?.message||"追加ファイルを読み込めませんでした。";}
       render();
     });
     document.querySelector("#applyTemplate")?.addEventListener("click",async()=>{
       try{
-        if(prepareTemplate==="transposed"&&!transposed){transposed=true;await loadCurrentFile();return;}
-        uiError="";
+        const defaults=templateDefaults(prepareTemplate);
+        rawHeaderRow=Math.max(1,Math.floor(Number(document.querySelector("#headerRow").value)||1));
+        rawHeaderDepth=Math.max(1,Math.min(3,Math.floor(Number(document.querySelector("#headerDepth").value)||1)));
+        transposed=Boolean(defaults.transpose);
+        await loadCurrentFile();return;
       }catch(err){uiError=err?.message||"テンプレートを適用できませんでした。";}
       render();
     });
