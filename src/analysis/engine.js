@@ -8,7 +8,7 @@ import { recommend } from "./recommender.js";
 import { validateDataset } from "../core/validation.js";
 
 const autoMode=m=>m==="auto"||m==="basic"||!m;
-const predictorsFor=(ds,target,max=20)=>ds.columns.filter(c=>c.kind==="numeric"&&c.name!==target).map(c=>c.name).slice(0,max);
+const predictorsFor=(ds,target,max=20)=>ds.columns.filter(c=>c.kind==="numeric"&&c.name!==target).map(c=>c.name).slice(0,max);\nconst finiteParam=(value,fallback)=>{const n=Number(value);return Number.isFinite(n)?n:fallback;};\nconst cleanPredictors=(items,target)=>items.filter((v,i,a)=>v!==target&&a.indexOf(v)===i);
 
 export function runAnalysis(ds,request){
   const mode=request.mode||"auto";let spec={...request};
@@ -25,10 +25,10 @@ export function runAnalysis(ds,request){
     case"mannwhitney":result=mannWhitneyU(ds,spec.group,spec.target);break;
     case"anova":result=oneWayAnova(ds,spec.group,spec.target);break;
     case"chisquare":result=chiSquareIndependence(ds,spec.group,spec.group2);break;
-    case"ols":{const predictors=spec.predictors?.length?spec.predictors:predictorsFor(ds,spec.target,12);result=multipleOLS(ds,spec.target,predictors);spec={...spec,predictors};break;}
-    case"ridge":{const predictors=spec.predictors?.length?spec.predictors:predictorsFor(ds,spec.target);result=ridgeRegression(ds,spec.target,predictors,Number(spec.lambda)||1);spec={...spec,predictors};break;}
-    case"lasso":{const predictors=spec.predictors?.length?spec.predictors:predictorsFor(ds,spec.target);result=lassoRegression(ds,spec.target,predictors,Number(spec.lambda)||0.1);spec={...spec,predictors};break;}
-    case"elasticnet":{const predictors=spec.predictors?.length?spec.predictors:predictorsFor(ds,spec.target);result=elasticNetRegression(ds,spec.target,predictors,{lambda:Number(spec.lambda)||0.1,alpha:Number.isFinite(Number(spec.alpha))?Number(spec.alpha):0.5});spec={...spec,predictors};break;}
+    case"ols":{const predictors=cleanPredictors(spec.predictors?.length?spec.predictors:predictorsFor(ds,spec.target,12),spec.target);result=multipleOLS(ds,spec.target,predictors);spec={...spec,predictors};break;}
+    case"ridge":{const predictors=cleanPredictors(spec.predictors?.length?spec.predictors:predictorsFor(ds,spec.target),spec.target);result=ridgeRegression(ds,spec.target,predictors,finiteParam(spec.lambda,1));spec={...spec,predictors};break;}
+    case"lasso":{const predictors=cleanPredictors(spec.predictors?.length?spec.predictors:predictorsFor(ds,spec.target),spec.target);result=lassoRegression(ds,spec.target,predictors,finiteParam(spec.lambda,0.1));spec={...spec,predictors};break;}
+    case"elasticnet":{const predictors=cleanPredictors(spec.predictors?.length?spec.predictors:predictorsFor(ds,spec.target),spec.target);result=elasticNetRegression(ds,spec.target,predictors,{lambda:finiteParam(spec.lambda,0.1),alpha:finiteParam(spec.alpha,0.5)});spec={...spec,predictors};break;}
     case"pca":result=pca(ds,spec.predictors,Number(spec.components)||5);break;
     default:throw new Error("未対応の分析手法です。");
   }
