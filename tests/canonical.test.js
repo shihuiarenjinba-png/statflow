@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ingestRows } from "../src/core/ingest.js";
+import { ingestRows, transposeRows } from "../src/core/ingest.js";
 import { validateDataset } from "../src/core/validation.js";
 
 describe("canonical dataset",()=>{
@@ -26,5 +26,16 @@ describe("canonical dataset",()=>{
     const v=validateDataset(ds);
     expect(v.issues.some(x=>x.code==="duplicate_rows")).toBe(true);
     expect(ds.rows).toHaveLength(3);
+  });
+  it("transposes rectangular CSV-like rows",()=>{
+    expect(transposeRows([["id","A","B"],["x",1,2],["y",3,4]])).toEqual([
+      ["id","x","y"],["A",1,3],["B",2,4]
+    ]);
+  });
+  it("can canonicalize a transposed input",()=>{
+    const ds=ingestRows([["id","A","B"],["x",1,2],["y",3,4]],"matrix.csv",{transpose:true});
+    expect(ds.source.transposed).toBe(true);
+    expect(ds.columns.map(c=>c.name)).toEqual(["id","x","y"]);
+    expect(ds.rows).toHaveLength(2);
   });
 });

@@ -35,6 +35,7 @@ export function canonicalizeTable(rawRows) {
     const original=String(nonEmpty[0][i] ?? "");
     if (h!==original) audit.push({type:"header_normalized", column:h, from:original, to:h});
   });
+
   const body=nonEmpty.slice(1).map((r,rowIndex)=>{
     const obj={};
     headers.forEach((h,i)=>{
@@ -60,33 +61,46 @@ export function canonicalizeTable(rawRows) {
     const lower=name.toLowerCase();
     const unique=new Set(values.map(v=>String(v))).size;
     if (kind==="categorical" && values.length>0 && unique===values.length && /(id|code|key|番号|識別)/i.test(lower)) kind="id";
-    return {name, kind, nonNull:values.length, unique};
+    return {
+      name,
+      kind,
+      nonNull:values.length,
+      unique,
+      parseConfidence:kind==="numeric" ? numericRate : kind==="date" ? dateRate : 1
+    };
   });
 
-  const kinds=Object.fromEntries(columns.map(c=>[c.name,c.kind]));
   body.forEach((row,rowIndex)=>{
     for (const c of columns) {
       const v=row[c.name];
       if (v===null) continue;
       if (c.kind==="numeric") {
         const n=parsePlainNumber(v);
-        if (n!==null && n!==v) audit.push({type:"numeric_parsed",row:rowIndex+1,column:c.name});
-        row[c.name]=n;
+        if (n!==null) {
+          if (n!==v) audit.push({type:"numeric_parsed",row:rowIndex+1,column:c.name});
+          row[c.name]=n;
+        } else {
+          audit.push({type:"numeric_parse_failed",row:rowIndex+1,column:c.name,value:String(v)});
+        }
       } else if (c.kind==="date") {
         const d=parseIsoDate(v);
-        if (d && d!==v) audit.push({type:"date_normalized",row:rowIndex+1,column:c.name});
-        row[c.name]=d ?? v;
+        if (d) {
+          if (d!==v) audit.push({type:"date_normalized",row:rowIndex+1,column:c.name});
+          row[c.name]=d;
+        } else {
+          audit.push({type:"date_parse_failed",row:rowIndex+1,column:c.name,value:String(v)});
+        }
       }
     }
   });
 
   return {
-    contractVersion:"1.0",
+    contractVersion:"1.1",
     columns,
     rows:body,
     audit,
     meta:{rowCount:body.length,columnCount:columns.length},
-    kinds
+    kinds:Object.fromEntries(columns.map(c=>[c.name,c.kind]))
   };
 }
 

@@ -4,6 +4,11 @@ import { welchTTest } from "../stats/comparison.js";
 import { multipleOLS, ridgeRegression } from "../stats/regression.js";
 import { pca } from "../stats/pca.js";
 import { recommend } from "./recommender.js";
+import { validateDataset } from "../core/validation.js";
+
+function isOverviewRequest(mode, request, spec) {
+  return spec.method==="descriptive" || (mode==="basic" && request.goal==="overview");
+}
 
 export function runAnalysis(ds, request) {
   const mode=request.mode || "basic";
@@ -13,21 +18,35 @@ export function runAnalysis(ds, request) {
     if(!rec.method) throw new Error(rec.reason);
     spec={...spec,...rec,recommendation:rec};
   }
+
+  const validation=validateDataset(ds);
+  if (validation.quality.gate==="block" && !isOverviewRequest(mode,request,spec)) {
+    const detail=validation.quality.critical.join(" ");
+    throw new Error(`データ品質ゲートにより推測分析を停止しました。${detail ? " "+detail : ""}`);
+  }
+
+  let result;
   switch(spec.method) {
-    case "descriptive": return {result:describeDataset(ds), spec};
-    case "correlation": return {result:correlationMatrix(ds), spec};
-    case "welch": return {result:welchTTest(ds,spec.group,spec.target), spec};
+    case "descriptive": result=describeDataset(ds); break;
+    case "correlation": result=correlationMatrix(ds); break;
+    case "welch": result=welchTTest(ds,spec.group,spec.target); break;
     case "ols": {
       const predictors=(spec.predictors?.length?spec.predictors:ds.columns.filter(c=>c.kind==="numeric"&&c.name!==spec.target).map(c=>c.name)).slice(0,12);
-      return {result:multipleOLS(ds,spec.target,predictors), spec:{...spec,predictors}};
+      result=multipleOLS(ds,spec.target,predictors);
+      spec={...spec,predictors};
+      break;
     }
     case "ridge": {
       const predictors=(spec.predictors?.length?spec.predictors:ds.columns.filter(c=>c.kind==="numeric"&&c.name!==spec.target).map(c=>c.name)).slice(0,20);
-      return {result:ridgeRegression(ds,spec.target,predictors,Number(spec.lambda)||1), spec:{...spec,predictors}};
+      result=ridgeRegression(ds,spec.target,predictors,Number(spec.lambda)||1);
+      spec={...spec,predictors};
+      break;
     }
-    case "pca": return {result:pca(ds,spec.predictors,Number(spec.components)||5), spec};
+    case "pca": result=pca(ds,spec.predictors,Number(spec.components)||5); break;
     default: throw new Error("未対応の分析手法です。");
   }
+
+  return {result,spec,quality:validation.quality};
 }
 
 export function explain(result) {

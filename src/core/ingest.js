@@ -24,7 +24,16 @@ function sheetToRows(workbook, sheetName) {
   return XLSX.utils.sheet_to_json(sheet, {header:1, defval:"", raw:false});
 }
 
-export async function ingestFile(file, preferredSheet) {
+export function transposeRows(rows) {
+  if (!rows?.length) return [];
+  const width=Math.max(...rows.map(r=>Array.isArray(r)?r.length:0));
+  return Array.from({length:width},(_,columnIndex)=>
+    rows.map(row=>Array.isArray(row) ? (row[columnIndex] ?? "") : "")
+  );
+}
+
+export async function ingestFile(file, preferredSheet, options={}) {
+  if (!file) throw new Error("ファイルを選択してください。");
   const name=file.name.toLowerCase();
   let rawRows, sheetNames=[];
   if (name.endsWith(".csv") || name.endsWith(".txt")) {
@@ -39,9 +48,18 @@ export async function ingestFile(file, preferredSheet) {
     throw new Error("CSV / XLSX / XLS のみ対応しています。");
   }
   if (!rawRows?.length) throw new Error("データが空です。");
-  return {...canonicalizeTable(rawRows), source:{fileName:file.name, sheetNames}};
+  const transposed=Boolean(options.transpose);
+  const analysisRows=transposed ? transposeRows(rawRows) : rawRows;
+  return {
+    ...canonicalizeTable(analysisRows),
+    source:{fileName:file.name, sheetNames, transposed}
+  };
 }
 
-export function ingestRows(rows, name="in-memory") {
-  return {...canonicalizeTable(rows), source:{fileName:name, sheetNames:[]}};
+export function ingestRows(rows, name="in-memory", options={}) {
+  const transposed=Boolean(options.transpose);
+  return {
+    ...canonicalizeTable(transposed ? transposeRows(rows) : rows),
+    source:{fileName:name, sheetNames:[], transposed}
+  };
 }
