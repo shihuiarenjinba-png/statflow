@@ -103,7 +103,7 @@ function render(){
               <label>追加ファイル<input id="prepareFiles" type="file" accept=".csv,.xlsx,.xls,.txt" multiple></label>
               <label class="wide-control">共通キー<select id="prepareKeys" multiple>${commonKeys.map(k=>`<option value="${esc(k)}" selected>${esc(k)}</option>`).join("")}</select></label>
               <label>Join<select id="joinHow"><option value="left" ${prepareDefaults.join?.how==="left"?"selected":""}>left（基準を保持）</option><option value="outer">outer（両方保持）</option><option value="inner">inner（共通のみ）</option></select></label>
-              ${marketSafe?'<label class="risk-control"><input id="allowRiskyInner" type="checkbox">市場データで危険なinner joinを明示許可</label>':""}
+              ${marketSafe?'<label class="risk-control"><input id="pointInTimeVerified" type="checkbox">基準ファイルが各時点のユニバースを含むことを確認済み</label><label class="risk-control"><input id="allowRiskyInner" type="checkbox">市場データで危険なinner joinを明示許可</label>':""}
               <button id="applyTemplate" class="secondary">テンプレート適用</button>
               <button id="runPrepare" class="primary" ${auxDatasets.length?"":"disabled"}>結合を実行</button>
             </div>
@@ -171,7 +171,8 @@ function render(){
         dataset=joinMany([dataset,...auxDatasets],{
           keys,how,
           marketSafe:Boolean(defaults.join?.marketSafe),
-          allowSurvivorshipRisk:Boolean(document.querySelector("#allowRiskyInner")?.checked)
+          allowSurvivorshipRisk:Boolean(document.querySelector("#allowRiskyInner")?.checked),
+          pointInTimeUniverseVerified:Boolean(document.querySelector("#pointInTimeVerified")?.checked)
         });
         prepareReports=dataset.prepareReports||[];
         auxDatasets=[];
