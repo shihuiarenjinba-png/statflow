@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ingestRows } from "../src/core/ingest.js";
 import { detectCommonKeys, joinDatasets, joinMany } from "../src/prepare/join.js";
 import { templateDefaults } from "../src/prepare/templates.js";
+import { auditMarketUniverse } from "../src/prepare/market.js";
 
 const base=ingestRows([
   ["ticker","date","ret"],
@@ -67,6 +68,24 @@ describe("prepare and joins",()=>{
     expect(out.rows).toHaveLength(3);
     expect(out.rows.find(r=>r.ticker==="A").sector).toBe("Tech");
     expect(out.prepareReports).toHaveLength(2);
+  });
+
+  it("warns when point-in-time universe is not verified",()=>{
+    const audit=auditMarketUniverse(base,["ticker","date"]);
+    expect(audit.pointInTimeVerified).toBe(false);
+    expect(audit.warnings.some(w=>/point-in-time/.test(w))).toBe(true);
+  });
+
+  it("market join carries universe audit",()=>{
+    const out=joinDatasets(base,factor,{keys:["ticker","date"],how:"left",marketSafe:true});
+    expect(out.prepareReport.marketAudit).toBeTruthy();
+    expect(out.prepareReport.warnings.some(w=>/サバイバーシップ/.test(w))).toBe(true);
+  });
+
+  it("verified point-in-time universe removes the unknown-universe warning",()=>{
+    const out=joinDatasets(base,factor,{keys:["ticker","date"],how:"left",marketSafe:true,pointInTimeUniverseVerified:true});
+    expect(out.prepareReport.marketAudit.pointInTimeVerified).toBe(true);
+    expect(out.prepareReport.warnings.some(w=>/未確認/.test(w))).toBe(false);
   });
 
   it("market template defaults to safe left join",()=>{
