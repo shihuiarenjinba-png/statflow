@@ -5,6 +5,16 @@ export const PREPARE_TEMPLATES=[
     description:"1行目が列名、1行=1観測の通常データ。安全な整形のみ行います。"
   },
   {
+    id:"metadata_header",
+    label:"先頭に説明行がある表",
+    description:"タイトルや注記の後ろに見出しがある表。見出し行番号を明示指定して読み直します。"
+  },
+  {
+    id:"two_row_header",
+    label:"2段見出し",
+    description:"上位見出しと下位見出しを「上位 / 下位」として連結してからCanonical Datasetへ変換します。"
+  },
+  {
     id:"transposed",
     label:"転置テーブル",
     description:"変数が行方向に並ぶ表を明示的に転置してからCanonical Datasetへ変換します。"
@@ -28,10 +38,12 @@ export const PREPARE_TEMPLATES=[
 
 export function templateDefaults(id) {
   switch(id) {
-    case "transposed": return {transpose:true};
+    case "metadata_header": return {transpose:false,headerRow:2,combineHeaderRows:1};
+    case "two_row_header": return {transpose:false,headerRow:1,combineHeaderRows:2};
+    case "transposed": return {transpose:true,headerRow:1,combineHeaderRows:1};
     case "panel": return {join:{how:"left",marketSafe:false,requireCompositeKey:true}};
     case "market_panel": return {join:{how:"left",marketSafe:true,requireCompositeKey:true}};
     case "multi_file_lookup": return {join:{how:"left",marketSafe:false,requireCompositeKey:false}};
-    default: return {transpose:false};
+    default: return {transpose:false,headerRow:1,combineHeaderRows:1};
   }
 }
