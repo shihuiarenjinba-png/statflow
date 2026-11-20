@@ -1,0 +1,25 @@
+{
+  "name": "statflow",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "cloudflare:dry-run": "npm run build && wrangler deploy --dry-run"
+  },
+  "dependencies": {
+    "jstat": "1.9.6",
+    "xlsx": "0.18.5"
+  },
+  "devDependencies": {
+    "vite": "5.4.10",
+    "vitest": "2.1.4",
+    "wrangler": "4.165.0"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}

@@ -1,0 +1,23 @@
+import { describe, expect, it } from "vitest";
+import { ingestRows } from "../src/core/ingest.js";
+import { describeDataset } from "../src/stats/descriptive.js";
+import { correlationMatrix, spearmanMatrix } from "../src/stats/correlation.js";
+import { welchTTest, mannWhitneyU, oneWayAnova } from "../src/stats/comparison.js";
+import { chiSquareIndependence } from "../src/stats/categorical.js";
+import { multipleOLS, ridgeRegression, lassoRegression, elasticNetRegression } from "../src/stats/regression.js";
+import { pca } from "../src/stats/pca.js";
+const ds=ingestRows([["x","z","y","group","segment"],[1,2,5,"A","X"],[2,1,7,"A","X"],[3,2,11,"A","Y"],[4,3,15,"B","Y"],[5,4,19,"B","X"],[6,5,23,"B","Y"],[7,6,27,"B","Y"],[8,7,31,"B","Y"]]);
+describe("statistics",()=>{
+  it("describes",()=>expect(describeDataset(ds).length).toBe(3));
+  it("Pearson",()=>expect(correlationMatrix(ds).matrix[0][0]).toBeCloseTo(1,10));
+  it("Spearman",()=>expect(spearmanMatrix(ds).matrix[0][0]).toBeCloseTo(1,10));
+  it("Welch",()=>expect(welchTTest(ds,"group","y").p).toBeGreaterThanOrEqual(0));
+  it("Mann-Whitney",()=>expect(mannWhitneyU(ds,"group","y").p).toBeGreaterThanOrEqual(0));
+  it("ANOVA",()=>{const a=ingestRows([["v","g"],[1,"A"],[2,"A"],[5,"B"],[6,"B"],[9,"C"],[10,"C"]]);expect(oneWayAnova(a,"g","v").groups).toHaveLength(3);});
+  it("chi-square",()=>expect(chiSquareIndependence(ds,"group","segment").df).toBeGreaterThan(0));
+  it("OLS",()=>expect(multipleOLS(ds,"y",["x","z"]).r2).toBeGreaterThan(.95));
+  it("Ridge",()=>expect(ridgeRegression(ds,"y",["x","z"],1).terms).toHaveLength(3));
+  it("Lasso",()=>expect(lassoRegression(ds,"y",["x","z"],.05).method).toBe("Lasso regression"));
+  it("Elastic Net",()=>expect(elasticNetRegression(ds,"y",["x","z"],{lambda:.05,alpha:.5}).terms).toHaveLength(3));
+  it("PCA",()=>expect(pca(ds,["x","z","y"],3).components.reduce((s,c)=>s+c.explained,0)).toBeCloseTo(1,5));
+});
